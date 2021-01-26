@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -97,7 +96,6 @@
                 </LinearLayout>
 
                 <include
-                    android:id="@+id/line_1"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     layout="@layout/horizontal_separate_line" />
@@ -115,7 +113,6 @@
                         android:layout_marginHorizontal="5dp"
                         android:scrollbars="horizontal" />
                     <include
-                        android:id="@+id/line_2"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         layout="@layout/horizontal_separate_line" />
@@ -126,7 +123,6 @@
                 </LinearLayout>
 
                 <include
-                    android:id="@+id/line_3"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     layout="@layout/horizontal_separate_line" />
@@ -191,7 +187,6 @@
                 </RelativeLayout>
 
                 <include
-                    android:id="@+id/line_4"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     layout="@layout/horizontal_separate_line" />
@@ -248,7 +243,7 @@
                         android:text="@string/precip_probability_label"
                         android:layout_toEndOf="@id/progress_humidity"
                         android:layout_alignTop="@id/progress_humidity"
-                        android:layout_marginStart="20dp"/>
+                        android:layout_marginStart="10dp"/>
                     <TextView
                         android:id="@+id/precipitation_value"
                         style="@style/defaultText.smallText"

@@ -2,29 +2,34 @@ package com.natasha.weatherapi.viewmodels
 
 import android.app.Application
 import android.util.Log
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.Transformations
+import androidx.lifecycle.*
 import com.natasha.weatherapi.WeatherRepository
 import com.natasha.weatherapi.api.*
+import com.natasha.weatherapi.city.WeatherAPIDatabase
+import kotlinx.coroutines.launch
 
 class WeatherDataViewModel(application: Application): AndroidViewModel(application) {
     private var weatherRepository: WeatherRepository
-    var allWeatherLiveData: MutableLiveData<List<WeatherData>> = MutableLiveData()
+    private var allWeatherLiveData: MutableLiveData<List<WeatherData>> = MutableLiveData()
     private var _currWeatherLiveData = MutableLiveData<List<WeatherData>>()
 
     var nextDaysWeatherLiveData: LiveData<List<WeatherData>>? = null
     init {
-        weatherRepository = WeatherRepository(application)
+        val db = WeatherAPIDatabase.getInstance(application, viewModelScope, application.resources)
+        val dao = db!!.weatherStore()
+        weatherRepository = WeatherRepository(dao)
     }
 
     fun getWeatherData(cityID: Int, units: String): LiveData<List<WeatherData>> {
-        var data = weatherRepository.getWeatherData(cityID, units)
+        val data = weatherRepository.getWeatherData(cityID, units)
         allWeatherLiveData = data
 
         getCurrentWeatherLiveData()
         return data
+    }
+
+    fun getWeatherCity(): LiveData<City?> {
+        return weatherRepository.getWeatherCity()
     }
 
     fun getWeatherDataByLocation(lat: Double, lon: Double, units: String): LiveData<List<WeatherData>> {
@@ -51,6 +56,10 @@ class WeatherDataViewModel(application: Application): AndroidViewModel(applicati
         val data = weatherRepository.getNextDaysWeatherLiveData()
         nextDaysWeatherLiveData = data
         return data
+    }
+
+    fun getWeatherResponse(): LiveData<WeatherResponseShort?> {
+        return weatherRepository.getWeatherResponse()
     }
 
     fun getCityLiveData(): LiveData<City> {

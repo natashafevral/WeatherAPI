@@ -5,15 +5,16 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import com.natasha.weatherapi.api.WeatherResponse
 
 @Dao
 interface BaseCityStore {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE, entity = BaseCity::class)
     suspend fun insertAllCities(cities: List<BaseCity>)
 
     @Query("select * from baseCity order by rusName")
-    fun getAllCities(): LiveData<List<BaseCity>>
+     fun getAllCities(): LiveData<List<BaseCity>>
 
     @Query("select * from baseCity order by :value")
     fun getAllCitiesOrderBy(value: String): LiveData<List<BaseCity>>

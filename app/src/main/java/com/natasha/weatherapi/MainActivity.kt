@@ -2,6 +2,7 @@ package com.natasha.weatherapi
 
 import android.Manifest
 import android.animation.ObjectAnimator
+import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,14 +10,17 @@ import android.graphics.drawable.Animatable
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
+
 import android.os.Bundle
+import android.os.Handler
 
 import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.widget.Toast
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -30,15 +34,19 @@ import com.natasha.weatherapi.api.WeatherData
 import com.natasha.weatherapi.api.Wind
 import com.natasha.weatherapi.city.BaseCityViewModel
 import com.natasha.weatherapi.city.CityActivity
+import com.natasha.weatherapi.databinding.ActivityMainBinding
 import com.natasha.weatherapi.viewmodels.StandardViewModelFactory
 import com.natasha.weatherapi.viewmodels.WeatherDataViewModel
-import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.coroutines.*
+import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 
 class MainActivity : AppCompatActivity() {
-
-    private var requestCode = 90
+    private lateinit var binding: ActivityMainBinding
+    private var permissionRequestCode = 90
+    private var isWait = false
+    private var internetRequestCode = 0
     private lateinit var locationManager: LocationManager
     private var locationProvider = LocationManager.GPS_PROVIDER
     private var minTimeLocation: Long = 0 //ms
@@ -52,7 +60,7 @@ class MainActivity : AppCompatActivity() {
     private val detailDataLimit = 12
     private var appInstance: WeatherApplication
     private val viewModelFactory: StandardViewModelFactory //edit
-
+    private lateinit var appName: String
     private lateinit var detailAdapter: DetailWeatherAdapter
     private var detailLayoutManager = LinearLayoutManager(this)
 
@@ -99,9 +107,7 @@ class MainActivity : AppCompatActivity() {
                 getWeatherData(it != null)*/
             })*/
         }
-
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
-            Log.d("main act geo", "status changed")
         }
 
         override fun onProviderEnabled(provider: String) {
@@ -118,20 +124,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         Log.d("main actn", "on Create")
         locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
-
-
-        swipe_refresh.setOnRefreshListener {
+        appName = getString(R.string.app_name)
+        binding.swipeRefresh.setOnRefreshListener {
             getWeatherData()
         }
-
-        ic_city.setOnClickListener {
+        binding.icCity.setOnClickListener {
             val intent = Intent(this, CityActivity::class.java)
             intent.putExtra("CurrentCityID", cityID)
-            startActivityForResult(intent, requestCode)
+            startActivityForResult(intent, permissionRequestCode)
         }
 
         createProgressHumAnimator()
@@ -141,7 +146,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == this.requestCode) {
+        Log.d("MAIN ACT RES", "requestCode $requestCode")
+        if (requestCode == this.permissionRequestCode) {
             Log.d("main act result", "res code ${resultCode}")
             if (resultCode == RESULT_OK) {
                 val extras = data?.extras
@@ -153,13 +159,29 @@ class MainActivity : AppCompatActivity() {
                 }
                 Log.d("main activity", "newCityID ${newCityID}")
             }
+        } else if (requestCode == internetRequestCode) {
+            isWait = true
+            Log.d("main act result", "before ")
+            Toast.makeText(this, "Ожидание сети...", Toast.LENGTH_SHORT).show()
+            CoroutineScope(Dispatchers.IO).launch {
+                delay(4000)
+                withContext(Dispatchers.Main) {
+                    isWait = false
+                    getWeatherData()
+                }
+            }
+
+            Log.d("main actn resume", "after ")
+
         }
 
     }
 
     override fun onResume() {
         super.onResume()
-        if (!BaseCityViewModel.getIsGetWeatherByCityID() ) {
+
+        Log.d("MAIN ACT", "ON RESUME SPSPSPS")
+        if (!BaseCityViewModel.getIsGetWeatherByCityID() && !isWait ) {
             Log.d("main acti resume", "is not bycityID => by location")
             if (checkPermissionLocation()) {
                 Log.d("main acti resume", "permission true")
@@ -182,10 +204,6 @@ class MainActivity : AppCompatActivity() {
                 BaseCityViewModel.setIsGetWeatherByCityID(true)
                 getWeatherData()
             }
-        } else {
-            Log.d("main actn resume", "onResume here")
-            getWeatherData()
-
         }
 
 
@@ -226,7 +244,7 @@ class MainActivity : AppCompatActivity() {
                     .setTitle(R.string.title_permission_location)
                     .setMessage(R.string.message_permission_location)
                     .setPositiveButton(
-                        R.string.permission_access,
+                        R.string.continue_action,
                         object : DialogInterface.OnClickListener {
                             override fun onClick(p0: DialogInterface?, p1: Int) {
                                 ActivityCompat.requestPermissions(
@@ -235,7 +253,7 @@ class MainActivity : AppCompatActivity() {
                                     PERMISSION_REQUEST_CODE
                                 )
                             }
-                        }).setNegativeButton(R.string.permission_denied, null)
+                        }).setNegativeButton(R.string.cancel, null)
                     .create()
                     .show()
 
@@ -254,71 +272,119 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun isInternetAvailable(context: Context): Boolean {
+        var result = false
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val networkCapabilities = connectivityManager.activeNetwork ?: return false
+            val actNetwork = connectivityManager.getNetworkCapabilities(networkCapabilities) ?: return false
+            result = when {
+                actNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
+                actNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
+                actNetwork.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> true
+                else -> false
+            }
+        } else {
+            connectivityManager.run {
+                connectivityManager.activeNetworkInfo?.run {
+                    result = when (type) {
+                        ConnectivityManager.TYPE_WIFI -> true
+                        ConnectivityManager.TYPE_MOBILE -> true
+                        ConnectivityManager.TYPE_ETHERNET -> true
+                        else -> false
+                    }
+
+                }
+            }
+        }
+        return result
+    }
+
 
     private fun getWeatherData() {
-        Log.d("main act get W", "is byCityID ${BaseCityViewModel.getIsGetWeatherByCityID()}")
-        swipe_refresh.isRefreshing = true
-        if (BaseCityViewModel.getIsGetWeatherByCityID()) {
-            Log.d("main act get W", "I call getWeather cityID ${cityID}")
-            weatherDataViewModel.getWeatherData(cityID, appInstance.unitValue).observe(
-                this,
-                { weatherList ->
-                    detailWeatherData = weatherList.take(detailDataLimit)
-                    swipe_refresh.isRefreshing = false
-                })
-        } else {
-            Log.d("main act check X", "currentCoordLoc: $currentCoordLoc, providerIsEnabled: $providerIsEnabled")
-            if (providerIsEnabled) {
-                Log.d("main act get W", "I call getWeather coord")
-                weatherDataViewModel.getWeatherDataByLocation(currentCoordLoc, appInstance.unitValue)
-                    .observe(this@MainActivity, { weatherList ->
+        if (isInternetAvailable(this.applicationContext)) {
+            Log.d("main act get W", "is byCityID ${BaseCityViewModel.getIsGetWeatherByCityID()}")
+            binding.swipeRefresh.isRefreshing = true
+            if (BaseCityViewModel.getIsGetWeatherByCityID()) {
+                Log.d("main act get W", "I call getWeather cityID ${cityID}")
+                weatherDataViewModel.getWeatherData(cityID, appInstance.unitValue).observe(
+                    this,
+                    { weatherList ->
                         detailWeatherData = weatherList.take(detailDataLimit)
-                    })
+                        binding.swipeRefresh.isRefreshing = false
+                    }
+                )
             } else {
-                AlertDialog.Builder(this)
-                    .setMessage(R.string.provider_disabled)
-                    .setPositiveButton(R.string.settings, object : DialogInterface.OnClickListener {
-                        override fun onClick(p0: DialogInterface?, p1: Int) {
-                            val callGPSSettingIntent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-                            this@MainActivity.startActivity(callGPSSettingIntent)
-                        }
-                    }).setNegativeButton(R.string.cancel, null)
-                    .create()
-                    .show()
+                Log.d("main act check X", "currentCoordLoc: $currentCoordLoc, providerIsEnabled: $providerIsEnabled")
+                if (providerIsEnabled) {
+                    Log.d("main act get W", "I call getWeather coord")
+                    weatherDataViewModel.getWeatherDataByLocation(currentCoordLoc, appInstance.unitValue)
+                        .observe(this@MainActivity, { weatherList ->
+                            detailWeatherData = weatherList.take(detailDataLimit)
+                        })
+                } else {
+                    AlertDialog.Builder(this)
+                        .setMessage(R.string.provider_disabled)
+                        .setPositiveButton(R.string.settings, object : DialogInterface.OnClickListener {
+                            override fun onClick(p0: DialogInterface?, p1: Int) {
+                                val callGPSSettingIntent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                                this@MainActivity.startActivity(callGPSSettingIntent)
+                            }
+                        }).setNegativeButton(R.string.cancel, null)
+                        .create()
+                        .show()
+                }
+                binding.swipeRefresh.isRefreshing = false
             }
-            swipe_refresh.isRefreshing = false
+
+            weatherDataViewModel.getCityLiveData().observe(this, {city ->
+                Log.d("main actn", "Get city Live Data VM ${city}")
+
+                timezone = city.timezone
+
+                if (!BaseCityViewModel.getIsGetWeatherByCityID()) {
+                    cityID = 0
+                    BaseCityViewModel.setCityByCurrLocation(city)
+                }
+                fillDetailWeatherData(detailWeatherData)
+                fillCityData(city)
+            })
+
+            weatherDataViewModel.getDaysWeatherLiveData().observe(this, { weatherList ->
+                fillDailyWeatherData(weatherList)
+                //Log.d("weather five data", "${weatherList}")
+            })
+
+            weatherDataViewModel.getCurrentWeatherLiveData().observe(this, { weatherList ->
+                fillCurrentWeather(weatherList)
+                //Log.d("curr weather data", "${it}")
+            })
+             weatherDataViewModel.getWeatherResponse().observe(this, {
+                 Log.d("Main DB WEATHErr","weather resp is null?: ${it == null}")
+                 Log.d("Main DB WEATHEr","weather resp: $it")
+             })
+        } else {
+            binding.swipeRefresh.isRefreshing = false
+            AlertDialog.Builder(this)
+                .setMessage(getString(R.string.internet_disabled, appName))
+                .setPositiveButton(R.string.permission_access, object : DialogInterface.OnClickListener {
+                    override fun onClick(p0: DialogInterface?, p1: Int) {
+                        val callInternetIntent = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                        this@MainActivity.startActivityForResult(callInternetIntent, internetRequestCode)
+                    }
+                }).setNegativeButton(R.string.cancel, null)
+                .create()
+                .show()
         }
-
-        weatherDataViewModel.getCityLiveData().observe(this, {
-            Log.d("main actn", "Get city Live Data VM ${it}")
-            timezone = it.timezone
-            if (!BaseCityViewModel.getIsGetWeatherByCityID()) {
-                cityID = 0
-                BaseCityViewModel.setCityByCurrLocation(it)
-            }
-            fillDetailWeatherData(detailWeatherData)
-            fillCityData(it)
-        })
-
-        weatherDataViewModel.getDaysWeatherLiveData().observe(this, { weatherList ->
-            fillDailyWeatherData(weatherList)
-            //Log.d("weather five data", "${weatherList}")
-        })
-
-        weatherDataViewModel.getCurrentWeatherLiveData().observe(this, { weatherList ->
-            fillCurrentWeather(weatherList)
-            //Log.d("curr weather data", "${it}")
-        })
-
     }
 
 
     private fun fillDetailWeatherData(list: List<WeatherData>) { // DETAIL
-        if (detail_weather.adapter == null) {
+        if (binding.detailWeather.adapter == null) {
             detailAdapter = DetailWeatherAdapter(list.toMutableList(), timezone)
             detailLayoutManager.orientation = LinearLayoutManager.HORIZONTAL
-            detail_weather.layoutManager = detailLayoutManager
-            detail_weather.adapter = detailAdapter
+            binding.detailWeather.layoutManager = detailLayoutManager
+            binding.detailWeather.adapter = detailAdapter
             detailAdapter.notifyDataSetChanged()
         }
         detailAdapter.refreshData(list, timezone)
@@ -327,30 +393,30 @@ class MainActivity : AppCompatActivity() {
 
     private fun fillDailyWeatherData(list: List<WeatherData>) { // DAILY FIVE
         //Log.d("activity five day", "list : ${list}")
-        if (daily_weather.adapter == null) {
+        if (binding.dailyWeather.adapter == null) {
             dailyAdapter = DailyWeatherAdapter(list.toMutableList())
             dailyLayoutManager.orientation = LinearLayoutManager.VERTICAL
-            daily_weather.layoutManager = dailyLayoutManager
-            daily_weather.adapter = dailyAdapter
+            binding.dailyWeather.layoutManager = dailyLayoutManager
+            binding.dailyWeather.adapter = dailyAdapter
             dailyAdapter.notifyDataSetChanged()
         }
         dailyAdapter.refreshData(list)
     }
 
     private fun fillCityData(city: City) {
-        city_value.text = city.name
+        binding.cityValue.text = city.name
     }
 
     private fun fillCurrentWeather(list: List<WeatherData>) {
         val currData = list.first()
         val currMain = currData.main
         val currTemp = "${currMain.temp.roundToInt()}°"
-        curr_temp.text = currTemp
+        binding.currTemp.text = currTemp
         val descript = currData.weather.first().description
         val currDescr = Character.toUpperCase(descript[0]) + descript.substring(1)
-        curr_description.text = currDescr
+        binding.currDescription.text = currDescr
         val currFeel = "${currMain.feels_like.roundToInt()}°"
-        curr_feels_like.text = currFeel
+        binding.currFeelsLike.text = currFeel
         fillCurrentWind(currData.wind)
         fillCurrentComfort(currData.pop, currMain.pressure, currMain.humidity)
     }
@@ -360,41 +426,41 @@ class MainActivity : AppCompatActivity() {
         val direction =  appInstance.windMap.filterKeys{ it-25 <=deg && it+25 > deg }.map{ y -> y.value}.firstOrNull()
         //Log.d("fill curr wind act", "${direction}, speed: ${wind.speed}")
         if (direction != null) {
-            wind_direction_value.text = direction
+            binding.windDirectionValue.text = direction
         }
-        wind_speed_value.text = "${wind.speed}"
+        binding.windSpeedValue.text = "${wind.speed}"
         startWindAnimation()
     }
 
     private fun fillCurrentComfort(pop: Double, pressure: Int, humidity: Int) {
         val popText = "%.0f".format(pop)
-        precipitation_value.text = popText
-        pressure_value.text = pressure.toString()
+        binding.precipitationValue.text = popText
+        binding.pressureValue.text = pressure.toString()
         progressHumidityValue = humidity
         val humidText = "$progressHumidityValue%"
-        humidity_value.text = humidText
+        binding.humidityValue.text = humidText
         progressHumidAnimator.setIntValues(0, progressHumidityValue)
 
     }
 
     private fun startWindAnimation() {
-       val drawable = wind_icon.drawable
+       val drawable = binding.windIcon.drawable
         if(drawable is Animatable) {
            (drawable as Animatable).start()
        }
     }
 
     private fun createProgressHumAnimator() {
-        progressHumidAnimator = ObjectAnimator.ofInt(progress_humidity, "progress", 0, progressHumidityValue)
+        progressHumidAnimator = ObjectAnimator.ofInt(binding.progressHumidity, "progress", 0, progressHumidityValue)
 
         progressHumidAnimator.interpolator = FastOutSlowInInterpolator()
         progressHumidAnimator.duration = 4000
 
-        scroll_view.setOnScrollChangeListener(object: View.OnScrollChangeListener{
+        binding.scrollView.setOnScrollChangeListener(object: View.OnScrollChangeListener {
             override fun onScrollChange(view: View?, x: Int, y: Int, oldx: Int, oldy: Int) {
-                val scrollLineHeight = scroll_view.height
-                val screenHeight = scroll_view.getChildAt(0).height
-                val comfortLayoutPartHeight = comfort_layout.height * 15 / 100
+                val scrollLineHeight = binding.scrollView.height
+                val screenHeight = binding.scrollView.getChildAt(0).height
+                val comfortLayoutPartHeight = binding.comfortLayout.height * 15 / 100
                 val hh = y + scrollLineHeight
                 val div = (screenHeight - comfortLayoutPartHeight)
 
@@ -404,8 +470,8 @@ class MainActivity : AppCompatActivity() {
                     progressHumidAnimator.start()
                     startHumidityAnimFlag = false
                 }
-                if (hh < (screenHeight - comfort_layout.height) && !startHumidityAnimFlag) {
-                    progress_humidity.progress = 0
+                if (hh < (screenHeight - binding.comfortLayout.height) && !startHumidityAnimFlag) {
+                    binding.progressHumidity.progress = 0
                     startHumidityAnimFlag = true
 
                 }

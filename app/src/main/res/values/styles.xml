@@ -45,7 +45,7 @@
     </style>
     <style name="defaultText.titleText" >
         <item name="android:textStyle">bold</item>
-        <item name="android:textSize">@dimen/default_text_size</item>
+        <item name="android:textSize">@dimen/title_text_size</item>
     </style>
 
 </resources>

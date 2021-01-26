@@ -20,7 +20,7 @@ class DailyWeatherAdapter(var items: MutableList<WeatherData>): RecyclerView.Ada
     }
 
     override fun onBindViewHolder(holder: DailyWeatherHolder, position: Int) {
-        holder.bind(items[position])
+        holder.bind(items[position], position)
     }
 
     override fun getItemCount(): Int {
@@ -34,14 +34,15 @@ class DailyWeatherAdapter(var items: MutableList<WeatherData>): RecyclerView.Ada
 }
 
 class DailyWeatherHolder(itemView: View): RecyclerView.ViewHolder(itemView) {
-    fun bind(weatherData: WeatherData) {
+    fun bind(weatherData: WeatherData, position: Int) {
         val date = weatherData.dt_txt
        // Log.d("daily holder", "${date}")
         //Log.d("daily holder", "${weatherData}")
         val converter = ConvertDateToRussian(date)
         val day = converter.getDay()
         val monthRus = converter.getMonthOnRussian()
-        val dayOfWeekRus = converter.getDateOfWeekOnRussian()
+        var dayOfWeekRus = converter.getDateOfWeekOnRussian()
+        if (position == 0) dayOfWeekRus = "Завтра"
         val fullDay = "${dayOfWeekRus}, ${day} ${monthRus}"
         itemView.day.text = fullDay
        // Log.d("daily holder ", "${weatherData.weather[0]}")
@@ -53,7 +54,7 @@ class DailyWeatherHolder(itemView: View): RecyclerView.ViewHolder(itemView) {
         val maxTemp = weatherData.main.temp_max.roundToInt()
 
         val fullTemp = "$maxTemp° / $minTemp°"
-        Log.d("daily holder", fullTemp)
+     //   Log.d("daily holder", fullTemp)
         itemView.max_min_temp.text = fullTemp
 
     }

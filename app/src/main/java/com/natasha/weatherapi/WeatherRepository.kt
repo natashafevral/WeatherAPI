@@ -1,17 +1,18 @@
 package com.natasha.weatherapi
 
-import android.app.Application
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Transformations
 import com.natasha.weatherapi.api.*
 import com.natasha.weatherapi.helper.RetrofitBuilder
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 
-class WeatherRepository(private var application: Application) {
+class WeatherRepository(private val weatherStore: WeatherStore) {
     private var answerLiveData = MutableLiveData<WeatherResponse>()
     private var weatherDataList: List<WeatherData> = ArrayList<WeatherData>()
     private var weatherLiveData: MutableLiveData<List<WeatherData>> = MutableLiveData()
@@ -80,6 +81,12 @@ class WeatherRepository(private var application: Application) {
                     val result = response.body()
                     if (result != null) {
                         answerLiveData.value = result
+                        val responseShort = WeatherResponseShort(result.city.id, result.list)
+                        GlobalScope.launch {
+                            weatherStore.updateWeatherCity(result.city)
+                            weatherStore.updateWeather(responseShort)
+                        }
+
                         weatherDataList = result.list
                         weatherLiveData.value = weatherDataList
                         cityLiveData.value = result.city
@@ -90,6 +97,8 @@ class WeatherRepository(private var application: Application) {
                 } else {
                     Log.d("Weather answer if not 200", "response ")
                 }
+
+                
                     //Log.d("Weather answer service 2", "response ${cityLiveData.value }")
             }
             override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
@@ -101,9 +110,17 @@ class WeatherRepository(private var application: Application) {
 
 
     fun getNextDaysWeatherLiveData() = nextDaysWeatherLiveData
+    fun getAnswerLiveData() = answerLiveData
     fun getCurrentWeatherLiveData() = currentWeatherLiveData
     fun getCityLiveData(): LiveData<City> {
        // Log.d("REpo get city", "${cityLiveData.value} not null")
         return cityLiveData
+    }
+    fun getWeatherResponse(): LiveData<WeatherResponseShort?> {
+        return weatherStore.getWeather()
+    }
+
+    fun getWeatherCity(): LiveData<City?> {
+       return weatherStore.getWeatherCity()
     }
 }

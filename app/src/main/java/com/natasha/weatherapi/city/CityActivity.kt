@@ -9,19 +9,19 @@ import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
-import androidx.core.view.marginEnd
+
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 
 import com.natasha.weatherapi.R
 import com.natasha.weatherapi.WeatherApplication
+import com.natasha.weatherapi.databinding.ActivityCityBinding
 import com.natasha.weatherapi.viewmodels.StandardViewModelFactory
-import kotlinx.android.synthetic.main.activity_city.*
 
 
 class CityActivity : AppCompatActivity() {
-
+    private lateinit var binding: ActivityCityBinding
     private var popularLimit = 30
     private lateinit var cityAdapter: CityAdapter
     private var cityList: MutableList<BaseCity> = mutableListOf()
@@ -37,9 +37,10 @@ class CityActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_city)
+        binding = ActivityCityBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-        this.setSupportActionBar(toolbar)
+        this.setSupportActionBar(binding.toolbar)
         this.supportActionBar!!.setDisplayHomeAsUpEnabled(true)
         this.supportActionBar!!.setDisplayShowHomeEnabled(true)
 
@@ -47,8 +48,8 @@ class CityActivity : AppCompatActivity() {
         cityAdapter = CityAdapter(cityList, this@CityActivity)
         val layoutManager = LinearLayoutManager(this)
         layoutManager.orientation = LinearLayoutManager.VERTICAL
-        city_list.layoutManager = layoutManager
-        city_list.adapter = cityAdapter
+        binding.cityList.layoutManager = layoutManager
+        binding.cityList.adapter = cityAdapter
         Log.d("city activity", "end adapter")
 
 

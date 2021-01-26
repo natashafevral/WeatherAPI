@@ -42,7 +42,7 @@ class BaseCityViewModel(application: Application): AndroidViewModel(application)
 
 
     init {
-        val db = BaseCityDatabase.getInstance(application, viewModelScope, application.resources)
+        val db = WeatherAPIDatabase.getInstance(application, viewModelScope, application.resources)
         val dao = db!!.baseCityStore()
         repository = BaseCityRepository(dao)
     }
